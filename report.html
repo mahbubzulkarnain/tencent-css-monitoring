@@ -250,7 +250,9 @@ function getTimeRange() {
   const now = new Date();
   const end = new Date(Math.floor(now.getTime() / (15*60000)) * (15*60000));
   const start = new Date(end.getTime() - 15 * 60 * 1000);
-  const fmt = d => d.toISOString().replace('T',' ').substring(0,19);
+  // Format UTC ISO dengan suffix 'Z' — wajib, jika tanpa 'Z' Tencent akan
+  // membaca waktu sebagai WIB Beijing (UTC+8) sehingga data geser 8 jam.
+  const fmt = d => `${d.toISOString().substring(0, 19)}Z`;
   return { startTime: fmt(start), endTime: fmt(end), startObj: start, endObj: end };
 }
 
@@ -269,42 +271,61 @@ async function fetchAllMetrics() {
 
   try {
     // 1. Play Stats — bandwidth, traffic, requests, concurrent
-    const statResp = await callAPI(secretId, secretKey, 'DescribePlayStatInfoList', {
+    const statResp = await callAPI(secretId, secretKey, 'DescribeGroupProIspPlayInfoList', {
       StartTime: startTime,
       EndTime: endTime,
-      MainlandType: 'Overseas',
-      Granularity: 5
+      MainlandOrOversea: 'Oversea'
+    });
+
+    // Response: DataInfoList[] (per provinsi/ISP) -> DetailInfoList[] (per menit)
+    // dengan {Time, Bandwidth(Mbps), Flux(MB), Request, Online}.
+    // Jumlahkan semua provinsi/ISP per timestamp dulu agar dapat total global.
+    const timeBuckets = {};
+    (statResp?.DataInfoList || []).forEach(group => {
+      (group.DetailInfoList || []).forEach(info => {
+        const t = info.Time;
+        if (!timeBuckets[t]) timeBuckets[t] = { bandwidth: 0, flux: 0, request: 0, online: 0 };
+        timeBuckets[t].bandwidth += info.Bandwidth || 0;
+        timeBuckets[t].flux      += info.Flux    || 0;
+        timeBuckets[t].request   += info.Request || 0;
+        timeBuckets[t].online    += info.Online  || 0;
+      });
     });
 
     let maxBandwidth = 0, totalTraffic = 0, totalRequests = 0, maxConcurrent = 0;
-    (statResp?.PlayStatInfoList || []).forEach(info => {
-      if ((info.Bandwidth || 0) > maxBandwidth) maxBandwidth = info.Bandwidth || 0;
-      totalTraffic  += info.Flux    || 0;
-      totalRequests += info.Request || 0;
-      if ((info.Online || 0) > maxConcurrent) maxConcurrent = info.Online || 0;
+    Object.values(timeBuckets).forEach(b => {
+      if (b.bandwidth > maxBandwidth) maxBandwidth = b.bandwidth;
+      totalTraffic  += b.flux;
+      totalRequests += b.request;
+      if (b.online > maxConcurrent) maxConcurrent = b.online;
     });
 
     // 2. HTTP Status Codes
-    const httpResp = await callAPI(secretId, secretKey, 'DescribeLiveDomainHttpCodeData', {
+    const httpResp = await callAPI(secretId, secretKey, 'DescribeHttpStatusInfoList', {
       StartTime: startTime,
       EndTime: endTime
     });
 
+    // Response: DataInfoList[] (per menit) -> HttpStatusInfoList[] dengan {HttpStatus, Num}
     let s2xx=0, s3xx=0, s4xx=0, s5xx=0;
-    (httpResp?.RealDataInfoList || httpResp?.DataInfoList || []).forEach(item => {
-      const code = String(item.HttpCode || '');
-      const val  = item.Value || 0;
-      if      (code.startsWith('2')) s2xx += val;
-      else if (code.startsWith('3')) s3xx += val;
-      else if (code.startsWith('4')) s4xx += val;
-      else if (code.startsWith('5')) s5xx += val;
+    (httpResp?.DataInfoList || []).forEach(point => {
+      (point.HttpStatusInfoList || []).forEach(item => {
+        const code = String(item.HttpStatus || '');
+        const num  = item.Num || 0;
+        if      (code.startsWith('2')) s2xx += num;
+        else if (code.startsWith('3')) s3xx += num;
+        else if (code.startsWith('4')) s4xx += num;
+        else if (code.startsWith('5')) s5xx += num;
+      });
     });
     const totalHttp = s2xx + s3xx + s4xx + s5xx;
     const pct = n => totalHttp > 0 ? ((n/totalHttp)*100).toFixed(1) : '0.0';
 
     fetchedData = {
-      bandwidth : (maxBandwidth / 1000).toFixed(2),
-      traffic   : (totalTraffic / 1024).toFixed(2),
+      // Bandwidth & Flux dari Tencent sudah dalam Mbps & MB (sesuai unit di UI),
+      // tidak perlu dibagi 1000/1024 lagi.
+      bandwidth : maxBandwidth.toFixed(2),
+      traffic   : totalTraffic.toFixed(2),
       requests  : totalRequests.toLocaleString('id-ID'),
       concurrent: maxConcurrent.toLocaleString('id-ID'),
       s2xx: s2xx.toLocaleString('id-ID'), p2xx: pct(s2xx),
@@ -320,12 +341,12 @@ async function fetchAllMetrics() {
     generateReport();
     setIndicator('online');
     document.getElementById('lastUpdate').textContent =
-      'Update terakhir: ' + new Date().toLocaleTimeString('id-ID') + ' WIB';
+      `Update terakhir: ${new Date().toLocaleTimeString('id-ID')} WIB`;
     countdownSeconds = 900;
 
   } catch (err) {
     setIndicator('offline');
-    showError('❌ ' + err.message);
+    showError(`❌ ${err.message}`);
   }
 }
 
@@ -337,15 +358,15 @@ function updateMetricsUI() {
   document.getElementById('mTraffic').textContent    = fetchedData.traffic;
   document.getElementById('mRequests').textContent   = fetchedData.requests;
   document.getElementById('mConcurrent').textContent = fetchedData.concurrent;
-  document.getElementById('mCacheHit').textContent   = fetchedData.cacheHit + '%';
+  document.getElementById('mCacheHit').textContent   = `${fetchedData.cacheHit}%`;
   document.getElementById('h2xx').textContent = fetchedData.s2xx;
-  document.getElementById('p2xx').textContent = fetchedData.p2xx + '%';
+  document.getElementById('p2xx').textContent = `${fetchedData.p2xx}%`;
   document.getElementById('h3xx').textContent = fetchedData.s3xx;
-  document.getElementById('p3xx').textContent = fetchedData.p3xx + '%';
+  document.getElementById('p3xx').textContent = `${fetchedData.p3xx}%`;
   document.getElementById('h4xx').textContent = fetchedData.s4xx;
-  document.getElementById('p4xx').textContent = fetchedData.p4xx + '%';
+  document.getElementById('p4xx').textContent = `${fetchedData.p4xx}%`;
   document.getElementById('h5xx').textContent = fetchedData.s5xx;
-  document.getElementById('p5xx').textContent = fetchedData.p5xx + '%';
+  document.getElementById('p5xx').textContent = `${fetchedData.p5xx}%`;
 }
 
 function generateReport() {
@@ -399,13 +420,14 @@ function startCountdown() {
     const m = String(Math.floor(countdownSeconds / 60)).padStart(2,'0');
     const s = String(countdownSeconds % 60).padStart(2,'0');
     document.getElementById('countdownTimer').textContent = `${m}:${s}`;
-    document.getElementById('progressFill').style.width = ((countdownSeconds / 900) * 100) + '%';
+    document.getElementById('progressFill').style.width = `${(countdownSeconds / 900) * 100}%`;
   }, 1000);
 }
 
 // ─────────────────────────────────────────────
 // MONITORING CONTROL
 // ─────────────────────────────────────────────
+// biome-ignore lint/correctness/noUnusedVariables: dipanggil via onclick di HTML
 function startMonitoring() {
   const secretId  = document.getElementById('secretId').value.trim();
   const secretKey = document.getElementById('secretKey').value.trim();
@@ -424,6 +446,7 @@ function startMonitoring() {
   }, 900000);
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: dipanggil via onclick di HTML
 function stopMonitoring() {
   clearInterval(monitorInterval);
   clearInterval(countdownInterval);
@@ -437,6 +460,7 @@ function stopMonitoring() {
 // ─────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────
+// biome-ignore lint/correctness/noUnusedVariables: dipanggil via onclick di HTML
 function copyReport() {
   const text = document.getElementById('previewBox').textContent;
   if (text.includes('Start Monitoring')) { alert('Klik Start Monitoring dulu!'); return; }
@@ -447,6 +471,7 @@ function copyReport() {
   });
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: dipanggil via onclick di HTML
 function setStatus(s) {
   currentStatus = s;
   document.getElementById('btnNormal').classList.remove('active');
@@ -464,7 +489,7 @@ function setIndicator(state) {
     loading: ['ind-loading', '<div class="dot"></div> Fetching...'],
     offline: ['ind-offline', '<div class="dot"></div> Offline'],
   };
-  el.className = 'status-indicator ' + map[state][0];
+  el.className = `status-indicator ${map[state][0]}`;
   el.innerHTML = map[state][1];
 }
 
@@ -475,6 +500,7 @@ function showError(msg) {
 }
 function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
 
+// biome-ignore lint/correctness/noUnusedVariables: dipanggil via onclick di HTML
 function toggleSecret() {
   ['secretId','secretKey'].forEach(id => {
     const el = document.getElementById(id);

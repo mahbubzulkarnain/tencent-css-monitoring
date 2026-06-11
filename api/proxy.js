@@ -6,8 +6,8 @@ const HOST = `${SERVICE}.tencentcloudapi.com`;
 const VERSION = '2018-08-01';
 
 const ALLOWED_ACTIONS = new Set([
-  'DescribePlayStatInfoList',
-  'DescribeLiveDomainHttpCodeData',
+  'DescribeGroupProIspPlayInfoList',
+  'DescribeHttpStatusInfoList',
 ]);
 
 function sha256Hex(data) {
