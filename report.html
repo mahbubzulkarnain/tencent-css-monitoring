@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSS Realtime Report</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #0f0f1a; color: #e0e0e0; padding: 16px; min-height: 100vh; }
+    .container { max-width: 680px; margin: auto; }
+
+    h1 { text-align: center; color: #4fc3f7; margin-bottom: 6px; font-size: 20px; letter-spacing: 1px; }
+    .subtitle { text-align: center; color: #666; font-size: 12px; margin-bottom: 20px; }
+
+    .card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+    .card-title { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; border-bottom: 1px solid #2a2a4a; padding-bottom: 8px; }
+
+    label { display: block; font-size: 12px; color: #aaa; margin-bottom: 4px; margin-top: 10px; }
+    input, select { width: 100%; padding: 9px 12px; background: #0f0f1a; border: 1px solid #333; border-radius: 8px; color: #e0e0e0; font-size: 13px; }
+    input:focus, select:focus { outline: none; border-color: #4fc3f7; }
+    input[type="password"] { letter-spacing: 2px; }
+
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .clock-box { text-align: center; padding: 10px 0; }
+    .clock { font-size: 38px; font-weight: bold; color: #4fc3f7; font-family: monospace; }
+    .clock-date { font-size: 13px; color: #888; margin-top: 4px; }
+
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .metric-card { background: #0f0f1a; border: 1px solid #2a2a4a; border-radius: 10px; padding: 12px; text-align: center; }
+    .metric-icon { font-size: 20px; margin-bottom: 4px; }
+    .metric-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .metric-value { font-size: 18px; font-weight: bold; color: #4fc3f7; }
+    .metric-unit { font-size: 11px; color: #666; }
+
+    .http-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+    .http-card { background: #0f0f1a; border-radius: 8px; padding: 8px; text-align: center; border: 1px solid #2a2a4a; }
+    .http-code { font-size: 12px; font-weight: bold; }
+    .http-val { font-size: 14px; font-weight: bold; margin-top: 2px; }
+    .http-pct { font-size: 11px; color: #888; }
+    .s2xx .http-code { color: #4CAF50; }
+    .s3xx .http-code { color: #2196F3; }
+    .s4xx .http-code { color: #FF9800; }
+    .s5xx .http-code { color: #f44336; }
+
+    .status-row { display: flex; gap: 8px; margin-top: 8px; }
+    .status-btn { flex: 1; padding: 10px; border: 2px solid #333; border-radius: 8px; background: #0f0f1a; color: #aaa; cursor: pointer; font-size: 13px; text-align: center; transition: all 0.2s; }
+    .s-normal { color: #4CAF50; } .s-normal.active { background: #0a2a0a; border-color: #4CAF50; font-weight: bold; }
+    .s-warning { color: #FF9800; } .s-warning.active { background: #2a1a00; border-color: #FF9800; font-weight: bold; }
+    .s-critical { color: #f44336; } .s-critical.active { background: #2a0a0a; border-color: #f44336; font-weight: bold; }
+
+    .countdown-bar { background: #0f0f1a; border: 1px solid #2a2a4a; border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
+    .countdown-label { font-size: 12px; color: #888; }
+    .countdown-time { font-size: 24px; font-weight: bold; color: #FF9800; font-family: monospace; }
+    .progress-bar { height: 4px; background: #2a2a4a; border-radius: 4px; margin-top: 8px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #4fc3f7, #FF9800); border-radius: 4px; transition: width 1s linear; }
+
+    .btn { width: 100%; padding: 12px; border: none; border-radius: 10px; font-size: 14px; cursor: pointer; font-weight: bold; transition: all 0.2s; margin-bottom: 8px; }
+    .btn-primary { background: #1565C0; color: white; }
+    .btn-primary:hover { background: #1976D2; }
+    .btn-green { background: #25D366; color: white; }
+    .btn-green:hover { background: #1ebe57; }
+    .btn-stop { background: #c62828; color: white; display: none; }
+    .btn-stop:hover { background: #e53935; }
+
+    .preview-box { background: #0d1117; border: 1px solid #2a2a4a; border-radius: 10px; padding: 14px; font-family: monospace; font-size: 12.5px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; min-height: 80px; color: #c9d1d9; }
+
+    .status-indicator { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+    .ind-online  { background: #0a2a0a; color: #4CAF50; border: 1px solid #4CAF50; }
+    .ind-offline { background: #2a0a0a; color: #f44336; border: 1px solid #f44336; }
+    .ind-loading { background: #1a1a00; color: #FF9800; border: 1px solid #FF9800; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: blink 1.2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+    .toast { display: none; text-align: center; padding: 10px; border-radius: 8px; background: #0a2a0a; color: #4CAF50; font-size: 13px; font-weight: bold; margin-top: 8px; border: 1px solid #4CAF50; }
+    .error-msg { color: #f44336; font-size: 12px; margin-top: 8px; display: none; padding: 8px 12px; background: #2a0a0a; border-radius: 6px; border: 1px solid #f44336; }
+    .last-update { font-size: 11px; color: #666; text-align: right; margin-top: 6px; }
+    .toggle-secret { font-size: 11px; color: #4fc3f7; cursor: pointer; float: right; font-weight: normal; text-transform: none; letter-spacing: 0; }
+    .cache-row { display: flex; justify-content: space-between; align-items: center; background: #0f0f1a; border-radius: 8px; padding: 10px 14px; border: 1px solid #2a2a4a; margin-top: 10px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>📡 CSS Realtime Monitor</h1>
+  <p class="subtitle">Tencent Cloud – Cloud Streaming Services</p>
+
+  <!-- Jam Live -->
+  <div class="card">
+    <div class="clock-box">
+      <div class="clock" id="liveClock">--:--:--</div>
+      <div class="clock-date" id="liveDate">-</div>
+    </div>
+  </div>
+
+  <!-- Kredensial -->
+  <div class="card">
+    <div class="card-title">🔑 API Credentials
+      <span class="toggle-secret" onclick="toggleSecret()">👁 Show/Hide</span>
+    </div>
+    <label>Secret ID</label>
+    <input type="password" id="secretId" placeholder="AKIDxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+    <label>Secret Key</label>
+    <input type="password" id="secretKey" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+    <div class="grid2">
+      <div>
+        <label>Shift</label>
+        <select id="shift">
+          <option>Pagi</option>
+          <option>Siang</option>
+          <option>Malam</option>
+        </select>
+      </div>
+      <div>
+        <label>Pelapor</label>
+        <input type="text" id="reporter" placeholder="Tim NOC">
+      </div>
+    </div>
+    <div class="error-msg" id="errorMsg"></div>
+  </div>
+
+  <!-- Countdown -->
+  <div class="card">
+    <div class="card-title">⏱ Auto Refresh</div>
+    <div class="countdown-bar">
+      <div>
+        <div class="countdown-label">Refresh berikutnya dalam</div>
+        <div class="countdown-time" id="countdownTimer">15:00</div>
+      </div>
+      <div id="apiStatus" class="status-indicator ind-offline">
+        <div class="dot"></div> Offline
+      </div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:100%"></div></div>
+    <div class="last-update" id="lastUpdate">Belum ada data</div>
+  </div>
+
+  <!-- Metrics -->
+  <div class="card">
+    <div class="card-title">📊 Metrics Realtime</div>
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-icon">📶</div>
+        <div class="metric-label">Bandwidth Peak</div>
+        <div class="metric-value" id="mBandwidth">--</div>
+        <div class="metric-unit">Mbps</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon">📦</div>
+        <div class="metric-label">Total Traffic</div>
+        <div class="metric-value" id="mTraffic">--</div>
+        <div class="metric-unit">MB</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon">📥</div>
+        <div class="metric-label">Total Requests</div>
+        <div class="metric-value" id="mRequests">--</div>
+        <div class="metric-unit">kali</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon">👥</div>
+        <div class="metric-label">Concurrent Peak</div>
+        <div class="metric-value" id="mConcurrent">--</div>
+        <div class="metric-unit">kali</div>
+      </div>
+    </div>
+    <div class="cache-row">
+      <span style="font-size:13px;color:#aaa;">💾 Cache Hit Ratio</span>
+      <span style="font-size:20px;font-weight:bold;color:#4CAF50;" id="mCacheHit">--%</span>
+    </div>
+    <div class="http-grid">
+      <div class="http-card s2xx">
+        <div class="http-code">2xx ✅</div>
+        <div class="http-val" id="h2xx">--</div>
+        <div class="http-pct" id="p2xx">--%</div>
+      </div>
+      <div class="http-card s3xx">
+        <div class="http-code">3xx 🔄</div>
+        <div class="http-val" id="h3xx">--</div>
+        <div class="http-pct" id="p3xx">--%</div>
+      </div>
+      <div class="http-card s4xx">
+        <div class="http-code">4xx ⚠️</div>
+        <div class="http-val" id="h4xx">--</div>
+        <div class="http-pct" id="p4xx">--%</div>
+      </div>
+      <div class="http-card s5xx">
+        <div class="http-code">5xx 🚨</div>
+        <div class="http-val" id="h5xx">--</div>
+        <div class="http-pct" id="p5xx">--%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status & Incident -->
+  <div class="card">
+    <div class="card-title">🚦 Status & Incident</div>
+    <div class="status-row">
+      <button class="status-btn s-normal active" id="btnNormal" onclick="setStatus('NORMAL')">🟢 NORMAL</button>
+      <button class="status-btn s-warning" id="btnWarning" onclick="setStatus('WARNING')">🟡 WARNING</button>
+      <button class="status-btn s-critical" id="btnCritical" onclick="setStatus('CRITICAL')">🔴 CRITICAL</button>
+    </div>
+    <label>Incident</label>
+    <input type="text" id="incident" placeholder="Tidak ada / deskripsi...">
+    <label>Catatan</label>
+    <input type="text" id="notes" placeholder="Catatan tambahan...">
+  </div>
+
+  <!-- Kontrol -->
+  <button class="btn btn-primary" id="btnStart" onclick="startMonitoring()">▶️ Start Monitoring</button>
+  <button class="btn btn-stop" id="btnStop" onclick="stopMonitoring()">⏹ Stop Monitoring</button>
+
+  <!-- Preview & Copy -->
+  <div class="card">
+    <div class="card-title">📋 Preview Report WhatsApp</div>
+    <div class="preview-box" id="previewBox">Klik "Start Monitoring" untuk mulai...</div>
+    <br>
+    <button class="btn btn-green" onclick="copyReport()">📋 Copy ke WhatsApp</button>
+    <div class="toast" id="toast">✅ Disalin! Silakan paste ke WhatsApp.</div>
+  </div>
+</div>
+
+<script>
+let monitorInterval = null;
+let countdownInterval = null;
+let countdownSeconds = 900;
+let currentStatus = 'NORMAL';
+let fetchedData = {};
+
+// ─────────────────────────────────────────────
+// PROXY CALL — diteruskan ke /api/proxy (Vercel)
+// Kredensial dikirim per-request, tidak disimpan di server
+// ─────────────────────────────────────────────
+async function callAPI(secretId, secretKey, action, payload) {
+  const resp = await fetch('/api/proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ secretId, secretKey, action, payload })
+  });
+
+  const json = await resp.json();
+  if (json.error) throw new Error(json.error);
+  if (json.Response?.Error) throw new Error(`${json.Response.Error.Code}: ${json.Response.Error.Message}`);
+  return json.Response;
+}
+
+// ─────────────────────────────────────────────
+// TIME RANGE — 15 menit terakhir
+// ─────────────────────────────────────────────
+function getTimeRange() {
+  const now = new Date();
+  const end = new Date(Math.floor(now.getTime() / (15*60000)) * (15*60000));
+  const start = new Date(end.getTime() - 15 * 60 * 1000);
+  const fmt = d => d.toISOString().replace('T',' ').substring(0,19);
+  return { startTime: fmt(start), endTime: fmt(end), startObj: start, endObj: end };
+}
+
+// ─────────────────────────────────────────────
+// FETCH DATA
+// ─────────────────────────────────────────────
+async function fetchAllMetrics() {
+  const secretId  = document.getElementById('secretId').value.trim();
+  const secretKey = document.getElementById('secretKey').value.trim();
+  if (!secretId || !secretKey) { showError('SecretId dan SecretKey harus diisi!'); return; }
+
+  setIndicator('loading');
+  hideError();
+
+  const { startTime, endTime, startObj, endObj } = getTimeRange();
+
+  try {
+    // 1. Play Stats — bandwidth, traffic, requests, concurrent
+    const statResp = await callAPI(secretId, secretKey, 'DescribePlayStatInfoList', {
+      StartTime: startTime,
+      EndTime: endTime,
+      MainlandType: 'Overseas',
+      Granularity: 5
+    });
+
+    let maxBandwidth = 0, totalTraffic = 0, totalRequests = 0, maxConcurrent = 0;
+    (statResp?.PlayStatInfoList || []).forEach(info => {
+      if ((info.Bandwidth || 0) > maxBandwidth) maxBandwidth = info.Bandwidth || 0;
+      totalTraffic  += info.Flux    || 0;
+      totalRequests += info.Request || 0;
+      if ((info.Online || 0) > maxConcurrent) maxConcurrent = info.Online || 0;
+    });
+
+    // 2. HTTP Status Codes
+    const httpResp = await callAPI(secretId, secretKey, 'DescribeLiveDomainHttpCodeData', {
+      StartTime: startTime,
+      EndTime: endTime
+    });
+
+    let s2xx=0, s3xx=0, s4xx=0, s5xx=0;
+    (httpResp?.RealDataInfoList || httpResp?.DataInfoList || []).forEach(item => {
+      const code = String(item.HttpCode || '');
+      const val  = item.Value || 0;
+      if      (code.startsWith('2')) s2xx += val;
+      else if (code.startsWith('3')) s3xx += val;
+      else if (code.startsWith('4')) s4xx += val;
+      else if (code.startsWith('5')) s5xx += val;
+    });
+    const totalHttp = s2xx + s3xx + s4xx + s5xx;
+    const pct = n => totalHttp > 0 ? ((n/totalHttp)*100).toFixed(1) : '0.0';
+
+    fetchedData = {
+      bandwidth : (maxBandwidth / 1000).toFixed(2),
+      traffic   : (totalTraffic / 1024).toFixed(2),
+      requests  : totalRequests.toLocaleString('id-ID'),
+      concurrent: maxConcurrent.toLocaleString('id-ID'),
+      s2xx: s2xx.toLocaleString('id-ID'), p2xx: pct(s2xx),
+      s3xx: s3xx.toLocaleString('id-ID'), p3xx: pct(s3xx),
+      s4xx: s4xx.toLocaleString('id-ID'), p4xx: pct(s4xx),
+      s5xx: s5xx.toLocaleString('id-ID'), p5xx: pct(s5xx),
+      cacheHit: '--',
+      startTime: startObj.toTimeString().slice(0,5),
+      endTime  : endObj.toTimeString().slice(0,5),
+    };
+
+    updateMetricsUI();
+    generateReport();
+    setIndicator('online');
+    document.getElementById('lastUpdate').textContent =
+      'Update terakhir: ' + new Date().toLocaleTimeString('id-ID') + ' WIB';
+    countdownSeconds = 900;
+
+  } catch (err) {
+    setIndicator('offline');
+    showError('❌ ' + err.message);
+  }
+}
+
+// ─────────────────────────────────────────────
+// UI UPDATE
+// ─────────────────────────────────────────────
+function updateMetricsUI() {
+  document.getElementById('mBandwidth').textContent  = fetchedData.bandwidth;
+  document.getElementById('mTraffic').textContent    = fetchedData.traffic;
+  document.getElementById('mRequests').textContent   = fetchedData.requests;
+  document.getElementById('mConcurrent').textContent = fetchedData.concurrent;
+  document.getElementById('mCacheHit').textContent   = fetchedData.cacheHit + '%';
+  document.getElementById('h2xx').textContent = fetchedData.s2xx;
+  document.getElementById('p2xx').textContent = fetchedData.p2xx + '%';
+  document.getElementById('h3xx').textContent = fetchedData.s3xx;
+  document.getElementById('p3xx').textContent = fetchedData.p3xx + '%';
+  document.getElementById('h4xx').textContent = fetchedData.s4xx;
+  document.getElementById('p4xx').textContent = fetchedData.p4xx + '%';
+  document.getElementById('h5xx').textContent = fetchedData.s5xx;
+  document.getElementById('p5xx').textContent = fetchedData.p5xx + '%';
+}
+
+function generateReport() {
+  if (!fetchedData.bandwidth) return;
+  const date     = new Date().toLocaleDateString('id-ID', {day:'2-digit', month:'long', year:'numeric'});
+  const reporter = document.getElementById('reporter').value.trim() || 'Tim NOC';
+  const shift    = document.getElementById('shift').value;
+  const incident = document.getElementById('incident').value.trim() || 'Tidak ada';
+  const notes    = document.getElementById('notes').value.trim() || '-';
+  const nextTime = new Date(Date.now() + countdownSeconds * 1000).toTimeString().slice(0,5);
+  const statusEmoji = currentStatus === 'NORMAL' ? '🟢 NORMAL' :
+                      currentStatus === 'WARNING' ? '🟡 WARNING' : '🔴 CRITICAL';
+
+  document.getElementById('previewBox').textContent =
+`╔══════════════════════════════╗
+📡 *LIVE STREAMING REPORT*
+🕐 ${fetchedData.startTime} – ${fetchedData.endTime} WIB
+📅 ${date} | Shift: ${shift}
+👤 ${reporter}
+╚══════════════════════════════╝
+
+📊 *METRICS UTAMA*
+├ 📶 Bandwidth Peak : ${fetchedData.bandwidth} Mbps
+├ 📦 Total Traffic  : ${fetchedData.traffic} MB
+├ 📥 Total Requests : ${fetchedData.requests} kali
+└ 👥 Concurrent     : ${fetchedData.concurrent} kali
+
+💾 *CACHE & HTTP STATUS*
+├ 💾 Cache Hit      : ${fetchedData.cacheHit}%
+├ ✅ 2xx            : ${fetchedData.p2xx}%
+├ 🔄 3xx            : ${fetchedData.p3xx}%
+├ ⚠️ 4xx            : ${fetchedData.p4xx}%
+└ 🚨 5xx            : ${fetchedData.p5xx}%
+
+🚦 *STATUS: ${statusEmoji}*
+
+⚠️ *INCIDENT:* ${incident}
+📝 *Catatan:* ${notes}
+
+▶️ Report berikutnya: ${nextTime} WIB`;
+}
+
+// ─────────────────────────────────────────────
+// COUNTDOWN
+// ─────────────────────────────────────────────
+function startCountdown() {
+  countdownSeconds = 900;
+  if (countdownInterval) clearInterval(countdownInterval);
+  countdownInterval = setInterval(() => {
+    if (countdownSeconds > 0) countdownSeconds--;
+    const m = String(Math.floor(countdownSeconds / 60)).padStart(2,'0');
+    const s = String(countdownSeconds % 60).padStart(2,'0');
+    document.getElementById('countdownTimer').textContent = `${m}:${s}`;
+    document.getElementById('progressFill').style.width = ((countdownSeconds / 900) * 100) + '%';
+  }, 1000);
+}
+
+// ─────────────────────────────────────────────
+// MONITORING CONTROL
+// ─────────────────────────────────────────────
+function startMonitoring() {
+  const secretId  = document.getElementById('secretId').value.trim();
+  const secretKey = document.getElementById('secretKey').value.trim();
+  if (!secretId || !secretKey) { showError('SecretId dan SecretKey wajib diisi!'); return; }
+
+  document.getElementById('btnStart').style.display = 'none';
+  document.getElementById('btnStop').style.display  = 'block';
+
+  fetchAllMetrics();
+  startCountdown();
+
+  if (monitorInterval) clearInterval(monitorInterval);
+  monitorInterval = setInterval(() => {
+    fetchAllMetrics();
+    startCountdown();
+  }, 900000);
+}
+
+function stopMonitoring() {
+  clearInterval(monitorInterval);
+  clearInterval(countdownInterval);
+  document.getElementById('btnStart').style.display = 'block';
+  document.getElementById('btnStop').style.display  = 'none';
+  setIndicator('offline');
+  document.getElementById('countdownTimer').textContent = '15:00';
+  document.getElementById('progressFill').style.width = '100%';
+}
+
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+function copyReport() {
+  const text = document.getElementById('previewBox').textContent;
+  if (text.includes('Start Monitoring')) { alert('Klik Start Monitoring dulu!'); return; }
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.getElementById('toast');
+    t.style.display = 'block';
+    setTimeout(() => t.style.display = 'none', 3000);
+  });
+}
+
+function setStatus(s) {
+  currentStatus = s;
+  document.getElementById('btnNormal').classList.remove('active');
+  document.getElementById('btnWarning').classList.remove('active');
+  document.getElementById('btnCritical').classList.remove('active');
+  const map = { NORMAL: 'btnNormal', WARNING: 'btnWarning', CRITICAL: 'btnCritical' };
+  document.getElementById(map[s]).classList.add('active');
+  if (fetchedData.bandwidth) generateReport();
+}
+
+function setIndicator(state) {
+  const el = document.getElementById('apiStatus');
+  const map = {
+    online:  ['ind-online',  '<div class="dot"></div> Live'],
+    loading: ['ind-loading', '<div class="dot"></div> Fetching...'],
+    offline: ['ind-offline', '<div class="dot"></div> Offline'],
+  };
+  el.className = 'status-indicator ' + map[state][0];
+  el.innerHTML = map[state][1];
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
+
+function toggleSecret() {
+  ['secretId','secretKey'].forEach(id => {
+    const el = document.getElementById(id);
+    el.type = el.type === 'password' ? 'text' : 'password';
+  });
+}
+
+// Live clock
+setInterval(() => {
+  const now = new Date();
+  document.getElementById('liveClock').textContent = now.toLocaleTimeString('id-ID');
+  document.getElementById('liveDate').textContent  = now.toLocaleDateString('id-ID',
+    {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+}, 1000);
+
+// Auto shift on load
+window.onload = () => {
+  const h = new Date().getHours();
+  document.getElementById('shift').value =
+    h >= 7 && h < 15 ? 'Pagi' : h >= 15 && h < 23 ? 'Siang' : 'Malam';
+};
+</script>
+</body>
+</html>
